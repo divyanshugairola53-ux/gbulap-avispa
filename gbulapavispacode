@@ -1,0 +1,159 @@
+role doctor(D, S, P: agent,
+            H: hash_func,
+            SND, RCV: channel(dy))
+played_by D def= 
+  local State: nat,
+        IDnj, PWnj, Pk, R1, R2, R3, R5, R6, DeltaT, Anj, Bnj, Cnj, Dnj, D1nj, D2nj, O_nj, D3nj: text,
+        T1, T5,T4: text,
+        R4: text,
+        Dk1: symmetric_key,
+        MK: symmetric_key,
+        A_nj_inv: text
+
+  init State := 0
+
+  transition
+    % Doctor initiates login
+    1.State = 0 /\ RCV(start) =|>
+      State' := 1 /\
+      IDnj' := new() /\
+      PWnj' := new() /\
+      A_nj_inv' := new() /\
+      Anj' := H(concat(A_nj_inv, xor(R1, and(PWnj, IDnj)))) /\
+      Bnj' := H(concat(and(A_nj_inv, R2), MK)) /\
+      Cnj' := H(concat(R2, and(Bnj, IDnj))) /\
+      Dnj' := H(concat(Cnj, concat(R2, A_nj_inv))) /\
+      T1' := new() /\
+      R4' := new() /\
+      D1nj' := H(concat(Dnj, and(Cnj, xor(T1, R4)))) /\
+      D2nj' := H(concat(and(D1nj, Cnj), xor(R4, Pk))) /\
+      SND({D2nj. T1. D1nj}_inv(pk(D)))
+
+    % Doctor receives final auth message
+    2.State = 1 /\ RCV({T4. m_nj. O_nj. D3nj}_pk(D)) =|>
+      State' := 2 /\
+      T5' := new() /\
+      %(T5 - T4) < DeltaT /\
+      R5' := xor(O_nj. Anj) /\
+      R6' := xor(m_nj, Anj) /\
+      D3nj' := H(concat(and(Anj, and(m_nj, Cnj)), and(O_nj, T4))) /\
+      %(D3nj' = D3nj) /\
+      Dk1' := H(concat(and(R5', Pk), R6')) /\
+      secret(dk1, session_key, {D,S,P})
+
+end role
+
+role medicalserver(D, S, P: agent,
+                  H: hash_func,  
+                  SND, RCV: channel(dy))
+played_by S def=
+  local State: nat,
+        IDnj, Pk, R3, R6, DeltaT, Dnj, Cnj, D2nj, D1nj, D3nj, Xk, Dk, SK2, M_nj, Anj, O_nj: text,
+        T1, T2, T3, T4: text,
+        R4, R5: text,
+        Ek, Nk, Mk, Fk: text,
+        MK: symmetric_key,
+        A_nj_inv: text
+
+  init State := 0
+
+  transition
+    % Server receives login request
+    1.State = 0 /\ RCV({D2nj. T1. D1nj}_pk(S)) =|>
+      State' := 1 /\
+      T2' := new() /\
+      %(T2 - T1 < deltaT) /\
+      R4' := H(concat(Dnj, and(Cnj, xor(T1, D1nj)))) /\
+      Pk' := H(concat(and(D1nj, Cnj), xor(R4', D2nj))) /\
+      D2nj' := H(concat(and(D1nj, Cnj), xor(R4', Pk))) /\
+      %(D2nj' = D2nj) /\
+      R5' := new() /\
+      Ek' := H(concat(r3, and(Pk, xor(MK, r5)))) /\
+      Mk' := H(concat(a_nj_inv, and(MK, r3))) /\
+      Nk' := H(concat(and(Mk, Fk), r5)) /\
+      SND({Ek. Nk. T2}_pk(P))
+
+    % Server receives sensor response
+    2.State = 1 /\ RCV({T3. Xk. Dk}_pk(S)) =|>
+      State' := 2 /\
+      T4' := new() /\
+      %(T4 - T3 < deltaT) /\
+      R6' := H(concat(Fk, and(r3, xor(Mk, Xk)))) /\
+      SK2' := H(concat(and(R5, Pk), R6')) /\
+      Dk' := H(concat(SK2', and(Mk, T3))) /\
+      %(Dk' = Dk) /\
+      M_nj' := xor(R6', Anj) /\
+      O_nj' := xor(R5, Anj) /\
+      D3nj' := H(concat(and(Anj, and(M_nj', Cnj)), and(O_nj', T4))) /\
+      SND({T4. m_nj. O_nj. D3nj}_pk(D))
+
+end role
+
+role patient(D, S, P: agent,
+             H: hash_func,
+             SND, RCV: channel(dy))
+played_by P def=
+  %const SKP: symmetric_key  % Secret key
+  %const deltaT: nat   % Time threshold
+  
+  
+  local State: nat,
+        Pk: text,
+        Ek, Nk, Fk, Mk, DeltaT, PK3: text,
+        T2, T3: text,
+        R3, R5, R6: text,
+        Xk, Dk: text,
+        MK: symmetric_key,
+        SKP: symmetric_key
+
+  init State := 0
+
+  transition
+    % Sensor receives server message
+    1.State = 0 /\ RCV({Ek. Nk. T2}_pk(P)) =|>
+      State' := 1 /\
+      T3' := new() /\
+      %(T3 - T2 < deltaT) /\
+      R5' := H(concat(R3, and(Pk, xor(MK, Ek)))) /\
+      R6' := new() /\
+      Fk' := H(concat(Pk, and(SKP, R3))) /\
+      Nk' := H(concat(and(Mk, Fk'), R5')) /\
+      %(Nk' = Nk) /\
+      PK3' := H(concat(and(R5', Pk), R6)) /\
+      Xk' := H(concat(Fk, and(R3, xor(Mk, R6)))) /\
+      Dk' := H(concat(PK3', and(Mk, T3))) /\
+      SND({T3. Xk. Dk}_pk(S))
+
+end role
+
+role session(D, S, P: agent, H: hash_func)
+def=
+  local SD, SS, SP: channel(dy)
+
+  composition
+    doctor(D, S, P, H, SD, SP) /\
+    medicalserver(D, S, P, H, SS, SD) /\
+    patient(D, S, P, H, SP, SS)
+end role
+
+role environment()
+def=
+  const doctor, server, patient: agent,
+        h: hash_func,
+        session_key: protocol_id,
+        a_nj_inv: text
+
+  intruder_knowledge = {doctor, server, patient, h, a_nj_inv}
+
+  composition
+    session(doctor, server, patient, h)
+end role
+
+goal
+  secrecy_of session_key
+  authentication_on doctor_to_medicalserver
+  authentication_on medicalserver_to_doctor
+  authentication_on medicalserver_to_patient
+  authentication_on patient_to_medicalserver
+end goal
+environment()
